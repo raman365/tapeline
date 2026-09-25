@@ -1,1 +1,52 @@
-[]
+[
+  {
+    "at": 1790346021907,
+    "date": "2026-09-25T14:20:21.907Z",
+    "sex": "male",
+    "weightKg": 106,
+    "bodyFat": 28.1,
+    "bodyFatRange": [
+      24.6,
+      31.6
+    ],
+    "measurementsCm": {
+      "neck": 40.7,
+      "shoulders": 50,
+      "chest": 125.1,
+      "waistNatural": 105.5,
+      "waist": 106.5,
+      "hips": 117.4,
+      "thigh": 75.1,
+      "calf": 42.7,
+      "upperArm": 174.1,
+      "forearm": 33.2,
+      "inseam": 63,
+      "armLength": 53.1
+    }
+  },
+  {
+    "at": 1790345887927,
+    "date": "2026-09-25T14:18:07.927Z",
+    "sex": "male",
+    "weightKg": 106,
+    "bodyFat": 24.8,
+    "bodyFatRange": [
+      21.3,
+      28.3
+    ],
+    "measurementsCm": {
+      "neck": 38.5,
+      "shoulders": 50.7,
+      "chest": 118.1,
+      "waistNatural": 95.4,
+      "waist": 96.5,
+      "hips": 118.5,
+      "thigh": 78.9,
+      "calf": 38.6,
+      "upperArm": 159.8,
+      "forearm": 32.6,
+      "inseam": 60.3,
+      "armLength": 52
+    }
+  }
+]
