@@ -12,7 +12,7 @@ It then measures you like a tailor would.
 - **Circumferences:** neck, chest, waist (narrowest and at the navel), hips, thigh, calf, upper arm and forearm
 - **Lengths:** shoulder width, inseam, arm length, and (when visible) hand length and face width
 - **Estimated body fat:** a likely range, fat mass and lean mass, BMI, fat-free mass index, waist-to-height and waist-to-hip ratios
-- **History:** a record of past scans on this device, with changes since last time
+- **History:** every scan saved to [`data/history.json`](data/history.json) in this repo, with changes since last time
 
 ## Use it
 
@@ -39,6 +39,21 @@ The camera only works over `http://localhost` or HTTPS. The tracking models load
 
 No camera handy? Use **Use photos** with a front photo and a side photo taken the same way.
 
+## Saving your history
+
+Every scan is committed to `data/history.json` in this repo. The list has no cap, and it's the same list on every device. **The repo is public, so anyone can read that file**, including weight, body fat and measurements. Photos are never saved.
+
+Saving needs a GitHub token, which you add once on each device you scan with:
+
+1. Open [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
+2. Under **Repository access**, choose **Only select repositories** and pick **tapeline**.
+3. Under **Permissions**, set **Contents** to **Read and write**, then generate the token.
+4. In Tapeline, open **Settings**, paste the token under **Scan history on GitHub**, and press **Connect**.
+
+The token is kept only in that browser, never in the repo. Visitors without it can use the app, but their scans aren't saved and they don't see your history. Scans saved in a browser by an earlier version are moved into the file the first time you connect there.
+
+The app commits to `main`, so run `git pull` before pushing code changes from your computer.
+
 ## How it works
 
 - Your entered height divided by your height in pixels gives the scale in cm per pixel.
@@ -54,7 +69,7 @@ No camera handy? Use **Use photos** with a front photo and a side photo taken th
 
 These are estimates. Tape-based body-fat formulas differ from a DEXA scan by a few percentage points on their own, and camera measurements add error on top of that. Loose clothing, hair, posture, and a camera that isn't level all push numbers up. Use the range, calibrate with a tape if you can, and compare scans taken the same way over time.
 
-Everything runs in your browser. Photos never leave your device, and only the numbers are saved (in local storage) for your history.
+Everything runs in your browser. Photos never leave your device. Only the numbers are saved, to the history file described above.
 
 ## Files
 
@@ -62,4 +77,5 @@ Everything runs in your browser. Photos never leave your device, and only the nu
 - `js/vision.js`: MediaPipe pose + segmentation, and face and hand tracking on zoomed crops
 - `js/render.js`: wireframe body mesh, skeleton, face mesh, hands, tape-measure rings and height tape
 - `js/main.js`: camera, guided scan, results screen, history, units
+- `js/history.js`: reads and writes `data/history.json` through GitHub's API
 - `js/filter.js`: One Euro landmark smoothing

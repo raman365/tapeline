@@ -47,7 +47,7 @@
             <g class="ring"><path class="back" d="M95 152a25 6 0 0 1 50 0"/><path d="M95 152a25 6 0 0 0 50 0"/></g>
           </svg>
           <h1>Measure your body with your camera</h1>
-          <p>Two shots, front and side, give your neck, chest, waist, hip and limb measurements. Tapeline combines them with your height, weight and age to estimate body fat. Everything stays on this device.</p>
+          <p>Two shots, front and side, give your neck, chest, waist, hip and limb measurements. Tapeline combines them with your height, weight and age to estimate body fat. Photos never leave this device.</p>
           <div class="empty-actions">
             <button type="button" class="primary-btn" id="startCameraBtn">Start camera</button>
             <button type="button" class="ghost-btn" data-open-photos>Use photos</button>
@@ -131,6 +131,7 @@
       <div>
         <p class="results-date" id="resultsDate"></p>
         <h1 id="resultsTitle">Your body scan</h1>
+        <p class="save-status" id="saveStatus" role="status"></p>
       </div>
       <div class="results-actions">
         <div class="segmented" role="radiogroup" aria-label="Units" data-units-group>
@@ -181,9 +182,10 @@
     <section class="panel history" id="historyPanel">
       <div class="history-head">
         <h2>Your scans</h2>
-        <button class="link-btn" type="button" id="clearHistory">Clear history</button>
+        <a class="link-btn" id="historyFileLink" target="_blank" rel="noopener" hidden>View the file on GitHub</a>
       </div>
-      <table class="history-table" id="historyTable"></table>
+      <p class="panel-note" id="historyNote" hidden></p>
+      <table class="history-table" id="historyTable" hidden></table>
     </section>
   </section>
 
@@ -216,6 +218,16 @@
       <label class="check"><input type="checkbox" id="voiceInput"> Spoken instructions during a scan</label>
       <label class="check"><input type="checkbox" id="soundInput"> Sounds</label>
       <label class="check"><input type="checkbox" id="mirrorInput"> Mirror the camera</label>
+      <div class="field github">
+        <span class="field-label">Scan history on GitHub</span>
+        <p class="gh-status" id="ghStatus" role="status"></p>
+        <div class="gh-connect" id="ghConnect">
+          <input type="password" id="ghToken" placeholder="Paste a GitHub token" autocomplete="off" spellcheck="false" aria-label="GitHub token">
+          <button type="button" class="ghost-btn" id="ghConnectBtn">Connect</button>
+        </div>
+        <small>Scans are saved to <code>data/history.json</code> in the public tapeline repo, so anyone can read them. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create a fine-grained token</a> with access to only the tapeline repository and Contents set to "Read and write". It's kept only in this browser.</small>
+        <button type="button" class="link-btn" id="ghDisconnect" hidden>Disconnect this device</button>
+      </div>
       <div class="dialog-actions"><button class="primary-btn" value="close">Done</button></div>
     </form>
   </dialog>

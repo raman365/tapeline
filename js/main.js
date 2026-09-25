@@ -1,5 +1,6 @@
 import { Vision, POSE_MODELS } from './vision.js';
 import { LandmarkSmoother } from './filter.js';
+import { getToken, setToken, verifyToken, readHistory, saveScans, fileUrl } from './history.js';
 import {
   measureView, mergeFrames, computeMeasurements, report, checkPose, extent, MEASURES, bodyFatBands, TORSO_FRACS,
 } from './body.js';
@@ -34,7 +35,6 @@ const settings = {
   ...load('settings', {}),
 };
 const profile = { sex: null, age: null, heightCm: null, weightKg: null, ...load('profile', {}) };
-let history = load('history', []);
 const saveSettings = () => save('settings', settings);
 
 // ---------- Units ----------
@@ -127,6 +127,9 @@ const state = {
   scan: null,
   results: null,
   paused: false,
+  history: [], // scans from the GitHub history file, newest first
+  historyState: 'off', // off | loading | ready | error
+  historyError: '',
 };
 
 const isMirrored = () => state.source === 'camera' && settings.mirror;
@@ -579,18 +582,121 @@ function compute(result) {
   return result;
 }
 
-function saveToHistory(r) {
-  const entry = {
-    at: r.at, sex: r.profile.sex, weightKg: r.profile.weightKg, bf: r.report.bf, low: r.report.low, high: r.report.high, values: r.meas.values,
+// ---------- History (a JSON file in the GitHub repo) ----------
+
+const round = (x, digits = 1) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 10 ** digits) / 10 ** digits);
+const roundAll = (obj) => Object.fromEntries(Object.entries(obj ?? {}).map(([k, v]) => [k, round(v)]));
+const stamp = (at) => new Date(at).toISOString().slice(0, 16).replace('T', ' ');
+
+// One scan as it's stored in history.json: readable, rounded, no photos.
+function toEntry(r) {
+  const rep = r.report, p = r.profile;
+  return {
+    at: r.at,
+    date: new Date(r.at).toISOString(),
+    sex: p.sex,
+    age: p.age,
+    heightCm: round(p.heightCm),
+    weightKg: round(p.weightKg),
+    bodyFat: round(rep.bf),
+    bodyFatRange: [round(rep.low), round(rep.high)],
+    band: rep.band,
+    bmi: round(rep.bmi),
+    fatMassKg: round(rep.fatKg),
+    leanMassKg: round(rep.leanKg),
+    measurementsCm: roundAll(r.meas.values),
+    calibration: round(r.calibration, 3),
+    source: r.source,
   };
-  history = [entry, ...history.filter((h) => h.at !== r.at)].slice(0, 60);
-  save('history', history);
+}
+
+// Scans saved in this browser by earlier versions, converted to the file's format.
+const fromLocal = (h) => ({
+  at: h.at, date: new Date(h.at).toISOString(), sex: h.sex, weightKg: round(h.weightKg),
+  bodyFat: round(h.bf), bodyFatRange: [round(h.low), round(h.high)], measurementsCm: roundAll(h.values),
+});
+
+async function loadHistory() {
+  if (!getToken()) {
+    state.historyState = 'off';
+    return renderHistory();
+  }
+  state.historyState = 'loading';
+  renderHistory();
+  try {
+    state.history = (await readHistory()).scans;
+    state.historyState = 'ready';
+    const local = load('history', []);
+    const known = new Set(state.history.map((h) => h.at));
+    const fresh = local.filter((h) => !known.has(h.at)).map(fromLocal);
+    if (fresh.length) state.history = await saveScans(fresh, `Import ${fresh.length} scan${fresh.length > 1 ? 's' : ''} saved in the browser`);
+    if (local.length) localStorage.removeItem('tapeline:history');
+  } catch (err) {
+    state.historyState = 'error';
+    state.historyError = err.message;
+  }
+  renderHistory();
+  if (state.results) renderResults();
+}
+
+async function saveResult(r, message) {
+  if (!getToken()) {
+    r.saveState = 'off';
+    return renderSaveState();
+  }
+  r.saveState = 'saving';
+  renderSaveState();
+  try {
+    state.history = await saveScans([toEntry(r)], message);
+    state.historyState = 'ready';
+    r.saveState = 'saved';
+  } catch (err) {
+    r.saveState = 'error';
+    r.saveError = err.message;
+  }
+  if (state.results === r) renderResults();
+}
+
+function renderSaveState() {
+  const r = state.results, el = $('#saveStatus');
+  if (!r) return;
+  el.dataset.state = r.saveState;
+  el.innerHTML = {
+    saving: 'Saving to your history file…',
+    saved: `Saved to your <a href="${fileUrl()}" target="_blank" rel="noopener">history file</a> on GitHub.`,
+    error: `Not saved: ${r.saveError} <button type="button" class="link-btn" data-retry-save>Try again</button>`,
+    off: 'Not saved. <button type="button" class="link-btn" data-open-settings>Connect GitHub</button> to keep every scan in a history file.',
+  }[r.saveState] ?? '';
+}
+
+function renderHistory() {
+  const note = $('#historyNote'), table = $('#historyTable');
+  $('#historyFileLink').href = fileUrl();
+  $('#historyFileLink').hidden = state.historyState !== 'ready';
+  note.innerHTML = {
+    off: 'Scans on this device aren\'t being saved. <button type="button" class="link-btn" data-open-settings>Connect GitHub</button> to keep a permanent history.',
+    loading: 'Loading your history from GitHub…',
+    error: `Couldn't load your history: ${state.historyError} <button type="button" class="link-btn" data-retry-history>Try again</button>`,
+    ready: state.history.length ? '' : 'No scans saved yet.',
+  }[state.historyState];
+  note.hidden = !note.innerHTML;
+  const h = state.history;
+  table.hidden = state.historyState !== 'ready' || !h.length;
+  const current = state.results?.at;
+  table.innerHTML = `<thead><tr><th>Date</th><th>Body fat</th><th>Waist</th><th>Hips</th><th>Weight</th></tr></thead><tbody>${h.map((s, i) => {
+    const older = h[i + 1];
+    const d = older && s.bodyFat != null && older.bodyFat != null ? s.bodyFat - older.bodyFat : null;
+    const change = d !== null && Math.abs(d) >= 0.1 ? `<small>${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}</small>` : '';
+    return `<tr${s.at === current ? ' aria-current="true"' : ''}><td>${new Date(s.at).toLocaleDateString(undefined, { dateStyle: 'medium' })}</td>
+      <td>${s.bodyFat == null ? '–' : `${Number(s.bodyFat).toFixed(1)}%`}${change}</td>
+      <td>${fmtLen(s.measurementsCm?.waist)}</td><td>${fmtLen(s.measurementsCm?.hips)}</td><td>${s.weightKg ? fmtMass(s.weightKg) : '–'}</td></tr>`;
+  }).join('')}</tbody>`;
 }
 
 function showResults(result) {
   state.results = result;
   state.paused = true;
-  saveToHistory(result);
+  saveResult(result, `Save scan from ${stamp(result.at)} UTC`);
   $('#app').inert = true;
   $('#results').hidden = false;
   $('#results').scrollTop = 0;
@@ -646,8 +752,8 @@ function renderResults() {
   renderPhoto($('#sideCanvas'), r.side, r, 'side');
 
   // Measurements, with the change since your previous scan.
-  const prev = history.find((h) => h.at < r.at);
-  const rows = MEASURES.map((m) => [m.name, v[m.id], prev?.values?.[m.id]]);
+  const prev = state.history.find((h) => h.at < r.at);
+  const rows = MEASURES.map((m) => [m.name, v[m.id], prev?.measurementsCm?.[m.id]]);
   if (r.extras.handLength) rows.push(['Hand length', r.extras.handLength, null]);
   if (r.extras.faceWidth) rows.push(['Face width', r.extras.faceWidth, null]);
   $('#measureTable').innerHTML = rows.map(([name, val, before]) => {
@@ -671,14 +777,8 @@ function renderResults() {
   $('#calibReset').hidden = !calibrated;
   setText($('#calibStatus'), calibrated ? `Circumferences are scaled by ×${r.calibration.toFixed(3)} to match your tape measure.` : '');
 
-  const rowsH = history.map((h, i) => {
-    const older = history[i + 1];
-    const d = older && h.bf != null && older.bf != null ? h.bf - older.bf : null;
-    return `<tr${h.at === r.at ? ' aria-current="true"' : ''}><td>${new Date(h.at).toLocaleDateString(undefined, { dateStyle: 'medium' })}</td>
-      <td>${h.bf == null ? '–' : `${h.bf.toFixed(1)}%`}${d !== null && Math.abs(d) >= 0.1 ? `<small>${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}</small>` : ''}</td>
-      <td>${fmtLen(h.values?.waist)}</td><td>${fmtLen(h.values?.hips)}</td><td>${h.weightKg ? fmtMass(h.weightKg) : '–'}</td></tr>`;
-  }).join('');
-  $('#historyTable').innerHTML = `<thead><tr><th>Date</th><th>Body fat</th><th>Waist</th><th>Hips</th><th>Weight</th></tr></thead><tbody>${rowsH}</tbody>`;
+  renderSaveState();
+  renderHistory();
 }
 
 // A captured shot, cropped to the body, with the mesh, skeleton and tape measures drawn on it.
@@ -909,7 +1009,7 @@ $('#calibrateForm').addEventListener('submit', (e) => {
   settings.calibration = factor;
   saveSettings();
   compute(r);
-  saveToHistory(r);
+  saveResult(r, `Update scan from ${stamp(r.at)} UTC with a tape-measured calibration`);
   $('#calibInput').value = '';
   renderResults();
 });
@@ -918,26 +1018,71 @@ $('#calibReset').addEventListener('click', () => {
   saveSettings();
   if (state.results) {
     compute(state.results);
-    saveToHistory(state.results);
+    saveResult(state.results, `Update scan from ${stamp(state.results.at)} UTC without calibration`);
   }
   renderResults();
 });
-$('#clearHistory').addEventListener('click', () => {
-  if (!confirm('Delete all saved scans from this device?')) return;
-  history = state.results ? history.filter((h) => h.at === state.results.at) : [];
-  save('history', history);
-  renderResults();
+// Buttons inside rendered status text.
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-retry-save]') && state.results) saveResult(state.results, `Save scan from ${stamp(state.results.at)} UTC`);
+  if (e.target.closest('[data-retry-history]')) loadHistory();
+  if (e.target.closest('[data-open-settings]')) openSettings();
 });
 
 const settingsDialog = $('#settingsDialog');
 $('#modelSelect').replaceChildren(...Object.entries(POSE_MODELS).map(([id, name]) => new Option(name, id)));
-$('#settingsBtn').addEventListener('click', () => {
+function openSettings() {
   $('#modelSelect').value = settings.poseModel;
   $('#detailsInput').checked = settings.details;
   $('#voiceInput').checked = settings.voice;
   $('#soundInput').checked = settings.sound;
   $('#mirrorInput').checked = settings.mirror;
+  renderGithubSettings();
   settingsDialog.showModal();
+}
+$('#settingsBtn').addEventListener('click', openSettings);
+
+function renderGithubSettings(message = '') {
+  const connected = !!getToken();
+  $('#ghConnect').hidden = connected;
+  $('#ghDisconnect').hidden = !connected;
+  setText($('#ghStatus'), message || (connected
+    ? `Connected${settings.githubUser ? ` as ${settings.githubUser}` : ''}. Every scan is saved to the history file.`
+    : "Not connected. Scans on this device aren't saved."));
+}
+
+async function connectGithub() {
+  const input = $('#ghToken'), token = input.value.trim();
+  if (!token) return input.focus();
+  renderGithubSettings('Checking the token…');
+  try {
+    settings.githubUser = await verifyToken(token);
+    saveSettings();
+    setToken(token);
+    input.value = '';
+    renderGithubSettings();
+    await loadHistory();
+    // Save the scan on screen if it wasn't saved before connecting.
+    if (state.results && state.results.saveState !== 'saved') saveResult(state.results, `Save scan from ${stamp(state.results.at)} UTC`);
+  } catch (err) {
+    renderGithubSettings(err.message);
+  }
+}
+$('#ghConnectBtn').addEventListener('click', connectGithub);
+$('#ghToken').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault(); // Enter would otherwise close the dialog
+  connectGithub();
+});
+$('#ghDisconnect').addEventListener('click', () => {
+  setToken('');
+  settings.githubUser = '';
+  saveSettings();
+  state.history = [];
+  state.historyState = 'off';
+  renderGithubSettings();
+  renderHistory();
+  renderSaveState();
 });
 $('#modelSelect').addEventListener('change', (e) => {
   settings.poseModel = e.target.value;
@@ -963,6 +1108,7 @@ syncUnits();
 renderProfile();
 showEmpty();
 loadVision();
+loadHistory();
 requestAnimationFrame(tick);
 
 navigator.permissions?.query({ name: 'camera' })
