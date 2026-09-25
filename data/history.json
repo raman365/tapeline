@@ -1,5 +1,38 @@
 [
   {
+    "at": 1790349123845,
+    "date": "2026-09-25T15:12:03.845Z",
+    "sex": "male",
+    "age": 29,
+    "heightCm": 185,
+    "weightKg": 106,
+    "bodyFat": 28.9,
+    "bodyFatRange": [
+      25.4,
+      32.4
+    ],
+    "band": "High",
+    "bmi": 31,
+    "fatMassKg": 30.6,
+    "leanMassKg": 75.4,
+    "measurementsCm": {
+      "neck": 42.5,
+      "shoulders": 50.6,
+      "chest": 121.8,
+      "waistNatural": 105.3,
+      "waist": 109.7,
+      "hips": 121.9,
+      "thigh": 74,
+      "calf": 40.9,
+      "upperArm": 172.3,
+      "forearm": 33.3,
+      "inseam": 54.2,
+      "armLength": 54.4
+    },
+    "calibration": 1,
+    "source": "camera"
+  },
+  {
     "at": 1790346021907,
     "date": "2026-09-25T14:20:21.907Z",
     "sex": "male",
