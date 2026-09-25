@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tapeline</title>
+  <meta name="description" content="Measure your body and estimate body fat from two camera shots.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23102520'/%3E%3Cellipse cx='16' cy='17' rx='10' ry='3.5' fill='none' stroke='%23F5C73B' stroke-width='3'/%3E%3Ccircle cx='16' cy='8' r='3' fill='%23F1F3EC'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="wordmark">Tapeline</span>
+        <span class="model-status" id="modelStatus" role="status">Loading body tracking…</span>
+      </div>
+      <div class="toolbar">
+        <div class="segmented" role="radiogroup" aria-label="Units" data-units-group>
+          <button type="button" role="radio" data-units="metric">Metric</button>
+          <button type="button" role="radio" data-units="imperial">Imperial</button>
+        </div>
+        <select id="cameraSelect" aria-label="Camera" hidden></select>
+        <button type="button" class="icon-btn" id="settingsBtn" aria-label="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="stage" id="stage">
+        <canvas id="stageCanvas" aria-label="Camera view with body tracking"></canvas>
+        <video id="srcVideo" class="src-video" playsinline muted></video>
+
+        <div class="empty" id="emptyState">
+          <svg class="hero-figure" viewBox="0 0 240 262" aria-hidden="true">
+            <rect class="tape" x="26" y="18" width="12" height="236" rx="1.5"/>
+            <path class="tape-ticks" d="M26 30h5M26 42h5M26 54h8M26 66h5M26 78h5M26 90h8M26 102h5M26 114h5M26 126h8M26 138h5M26 150h5M26 162h8M26 174h5M26 186h5M26 198h8M26 210h5M26 222h5M26 234h8M26 246h5"/>
+            <circle class="body" cx="120" cy="34" r="16"/>
+            <path class="body" d="M120 50v10M92 66q28-8 56 0l-4 34q-6 20-4 32l6 24-6 14h-40l-6-14 6-24q2-12-4-32z"/>
+            <path class="body" d="M92 68l-20 42-14 36M148 68l20 42 14 36M108 170l-4 40-2 38M132 170l4 40 2 38"/>
+            <g class="ring"><path class="back" d="M93 84a27 6 0 0 1 54 0"/><path d="M93 84a27 6 0 0 0 54 0"/></g>
+            <g class="ring"><path class="back" d="M101 120a19 5 0 0 1 38 0"/><path d="M101 120a19 5 0 0 0 38 0"/></g>
+            <g class="ring"><path class="back" d="M95 152a25 6 0 0 1 50 0"/><path d="M95 152a25 6 0 0 0 50 0"/></g>
+          </svg>
+          <h1>Measure your body with your camera</h1>
+          <p>Two shots, front and side, give your neck, chest, waist, hip and limb measurements. Tapeline combines them with your height, weight and age to estimate body fat. Everything stays on this device.</p>
+          <div class="empty-actions">
+            <button type="button" class="primary-btn" id="startCameraBtn">Start camera</button>
+            <button type="button" class="ghost-btn" data-open-photos>Use photos</button>
+          </div>
+          <p class="empty-error" id="emptyError" role="alert" hidden></p>
+        </div>
+
+        <div class="guide" id="guide" hidden>
+          <p class="guide-step" id="guideStep"></p>
+          <h2 class="guide-title" id="guideTitle"></h2>
+          <ul class="guide-checks" id="guideChecks"></ul>
+        </div>
+        <div class="hold" id="hold" hidden>
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="hold-track" cx="60" cy="60" r="52"/><circle class="hold-fill" id="holdFill" cx="60" cy="60" r="52"/></svg>
+          <span id="holdText">Hold still</span>
+        </div>
+        <p class="hint" id="hint" aria-live="polite" hidden></p>
+        <div class="flash" id="flash"></div>
+      </div>
+
+      <div class="controls">
+        <button type="button" class="primary-btn" id="scanBtn" disabled>Start scan</button>
+        <button type="button" class="ghost-btn" data-open-photos>Use photos</button>
+        <p class="control-meta">Fitted clothes, bare feet, camera level at waist height</p>
+      </div>
+    </main>
+
+    <aside class="rail" aria-label="Your details and live tracking">
+      <section class="panel">
+        <h2>About you</h2>
+        <form class="profile" id="profileForm" novalidate>
+          <div class="field">
+            <span class="field-label" id="sexLabel">Sex</span>
+            <div class="segmented wide" role="radiogroup" aria-labelledby="sexLabel">
+              <button type="button" role="radio" data-sex="male">Male</button>
+              <button type="button" role="radio" data-sex="female">Female</button>
+            </div>
+          </div>
+          <label class="field">
+            <span class="field-label">Age</span>
+            <span class="input-unit"><input type="number" id="ageInput" min="13" max="90" step="1" inputmode="numeric"> years</span>
+          </label>
+          <div class="field">
+            <span class="field-label" id="heightLabel">Height</span>
+            <span class="input-unit" data-metric><input type="number" id="heightCm" min="120" max="230" step="0.5" inputmode="decimal" aria-labelledby="heightLabel"> cm</span>
+            <span class="input-unit" data-imperial hidden>
+              <input type="number" id="heightFt" min="4" max="7" step="1" inputmode="numeric" aria-label="Height, feet"> ft
+              <input type="number" id="heightIn" min="0" max="11.5" step="0.5" inputmode="decimal" aria-label="Height, inches"> in
+            </span>
+          </div>
+          <label class="field">
+            <span class="field-label">Weight</span>
+            <span class="input-unit"><input type="number" id="weightInput" step="0.1" inputmode="decimal"> <span id="weightUnit">kg</span></span>
+          </label>
+          <p class="field-error" id="profileError" role="alert" hidden></p>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Detail tracking</h2>
+        <div class="insets">
+          <figure><canvas id="faceInset" width="220" height="220"></canvas><figcaption>Face <span id="faceStat"></span></figcaption></figure>
+          <figure><canvas id="handInset0" width="220" height="220"></canvas><figcaption>Left hand <span id="handStat0"></span></figcaption></figure>
+          <figure><canvas id="handInset1" width="220" height="220"></canvas><figcaption>Right hand <span id="handStat1"></span></figcaption></figure>
+        </div>
+        <p class="panel-note" id="detailNote">Face and hands are tracked on zoomed views, so they work from across the room.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Scan</h2>
+        <ol class="steps">
+          <li id="stepFront"><span class="step-name">Front</span><span class="step-desc">Face the camera, arms out in an A</span></li>
+          <li id="stepSide"><span class="step-name">Side</span><span class="step-desc">Turn 90°, arms relaxed</span></li>
+        </ol>
+      </section>
+    </aside>
+  </div>
+
+  <section class="results" id="results" hidden aria-labelledby="resultsTitle">
+    <header class="results-head">
+      <div>
+        <p class="results-date" id="resultsDate"></p>
+        <h1 id="resultsTitle">Your body scan</h1>
+      </div>
+      <div class="results-actions">
+        <div class="segmented" role="radiogroup" aria-label="Units" data-units-group>
+          <button type="button" role="radio" data-units="metric">Metric</button>
+          <button type="button" role="radio" data-units="imperial">Imperial</button>
+        </div>
+        <button type="button" class="primary-btn" id="scanAgainBtn">Scan again</button>
+      </div>
+    </header>
+
+    <div class="result-hero">
+      <div class="bf">
+        <p class="bf-label">Estimated body fat</p>
+        <p class="bf-value"><span id="bfValue"></span><span class="pct">%</span></p>
+        <p class="bf-range" id="bfRange"></p>
+        <div class="bf-scale" id="bfScale" aria-hidden="true"></div>
+      </div>
+      <dl class="composition" id="composition"></dl>
+    </div>
+
+    <div class="photos">
+      <figure><canvas id="frontCanvas"></canvas><figcaption>Front: tape positions and circumferences</figcaption></figure>
+      <figure><canvas id="sideCanvas"></canvas><figcaption>Side: where each ring gets its depth</figcaption></figure>
+    </div>
+
+    <div class="results-grid">
+      <section class="panel">
+        <h2>Measurements</h2>
+        <table class="measure-table" id="measureTable"></table>
+        <p class="panel-note warn" id="contactNote" hidden></p>
+      </section>
+      <section class="panel">
+        <h2>How the estimate is made</h2>
+        <ul class="methods" id="methods"></ul>
+        <p class="panel-note">Each method has an error of a few percentage points compared with a DEXA scan, so the range matters more than the exact number. Loose clothing, big hair and a tilted camera all push measurements up.</p>
+        <form class="calibrate" id="calibrateForm">
+          <label for="calibInput">Have a tape measure? Enter your waist at the navel to calibrate every circumference.</label>
+          <div class="calibrate-row">
+            <span class="input-unit"><input type="number" id="calibInput" step="0.1" inputmode="decimal"> <span id="calibUnit">cm</span></span>
+            <button class="ghost-btn" type="submit">Calibrate</button>
+            <button class="link-btn" type="button" id="calibReset" hidden>Reset</button>
+          </div>
+          <p class="panel-note" id="calibStatus" role="status"></p>
+        </form>
+      </section>
+    </div>
+
+    <section class="panel history" id="historyPanel">
+      <div class="history-head">
+        <h2>Your scans</h2>
+        <button class="link-btn" type="button" id="clearHistory">Clear history</button>
+      </div>
+      <table class="history-table" id="historyTable"></table>
+    </section>
+  </section>
+
+  <dialog class="dialog" id="photosDialog" aria-labelledby="photosTitle">
+    <form method="dialog">
+      <h2 id="photosTitle">Measure from photos</h2>
+      <p>Use two full-body photos taken from 2–3 m away, with the camera level at waist height, in fitted clothes and bare feet.</p>
+      <div class="photo-picks">
+        <button type="button" class="photo-pick" data-pick="front"><span class="thumb" id="frontThumb"></span><span><b>Front photo</b><br>Facing the camera, arms out in an A</span></button>
+        <button type="button" class="photo-pick" data-pick="side"><span class="thumb" id="sideThumb"></span><span><b>Side photo</b><br>Turned 90°, arms relaxed at your sides</span></button>
+      </div>
+      <input type="file" accept="image/*" id="photoFile" hidden>
+      <p class="dialog-error" id="photosError" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button class="ghost-btn" value="cancel">Cancel</button>
+        <button class="primary-btn" type="button" id="analyzePhotos" disabled>Measure</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="dialog" id="settingsDialog" aria-labelledby="settingsTitle">
+    <form method="dialog">
+      <h2 id="settingsTitle">Settings</h2>
+      <label class="field">
+        <span class="field-label">Body tracking model</span>
+        <select id="modelSelect"></select>
+        <small>Heavier models find body edges more precisely but run slower.</small>
+      </label>
+      <label class="check"><input type="checkbox" id="detailsInput"> Track face and hands</label>
+      <label class="check"><input type="checkbox" id="voiceInput"> Spoken instructions during a scan</label>
+      <label class="check"><input type="checkbox" id="soundInput"> Sounds</label>
+      <label class="check"><input type="checkbox" id="mirrorInput"> Mirror the camera</label>
+      <div class="dialog-actions"><button class="primary-btn" value="close">Done</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
